@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Market Cap Animation</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; font-family: Arial, sans-serif; margin-top: 10px; }
+    #monthLabel { font-size: 1.5rem; margin-bottom: 5px; }
+    #loader { font-size: 1rem; color: #555; margin-top: 20px; }
+    #error { color: red; font-weight: bold; margin-top: 10px; }
+    canvas { max-width: 800px; margin: 0; padding: 0; }
+    button { margin-top: 10px; padding: 8px 16px; font-size: 1rem; }
+    #clearCacheBtn { background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+
+    /* Progress bar styles */
+    #progressContainer {
+      width: 700px;
+      margin: 10px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #progressBar {
+      width: 100%;
+      height: 10px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+    #progressIndicator {
+      height: 100%;
+      background-color: #4CAF50;
+      width: 0%;
+      transition: width 0.5s ease-in-out;
+    }
+    #monthDots {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+<div id="monthLabel"></div>
+<div id="progressContainer" style="display:none;">
+  <div id="progressBar">
+    <div id="progressIndicator"></div>
+  </div>
+  <div id="monthDots"></div>
+</div>
+<div id="loader">Loading data...</div>
+<div id="error" style="display:none;"></div>
+<button id="reload" style="display:none;">Retry Fetch</button>
+<canvas id="pieChart" style="display:none;"></canvas>
+<button id="clearCacheBtn" style="display:none;">Clear Cache</button>
+
+<script>
+  // ===== CONFIGURATION SECTION =====
+  // Unified cryptocurrency configuration
+  const coins = {
+    'ADA': {
+      color: '#0033ad',      // Cardano blue
+      supply: 45000000000
+    },
+    'ETH': {
+      color: '#3c3c3d',      // Ethereum dark gray
+      supply: 120000000
+    },
+    'BNB': {
+      color: '#f3ba2f',      // Binance yellow
+      supply: 166801148
+    },
+    'TON': {
+      color: '#0088CC',      // TonCoin blue
+      supply: 5000000000
+    },
+    'SOL': {
+      color: '#14f195',      // Solana green
+      supply: 555000000
+    },
+    'USDT': {
+      color: '#26a17b',      // Tether green
+      supply: 83000000000
+    },
+    'BTC': {
+      color: '#f7931a',      // Bitcoin orange
+      supply: 21000000
+    }
+  };
+
+  // Define cryptocurrencies to display (using CryptoCompare API symbols)
+  const cryptos = ['ADA', 'ETH', 'BNB', 'TON', 'SOL', 'BTC'];
+
+  // Month names for date formatting
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June', 
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  // Generate array of last N months (newest to oldest)
+  const months = [];
+  let date = new Date();
+  for (let i = 0; i < 12*3; i++) {
+    months.unshift(`${monthNames[date.getMonth()]} ${date.getFullYear()}`);
+    date.setMonth(date.getMonth() - 1);
+  }
+
+  // Initialize market cap and price data structures
+  const marketCaps = {};
+  const prices = {};
+  cryptos.forEach(crypto => {
+    marketCaps[crypto] = [];
+    prices[crypto] = [];
+  });
+
+  // Cache expiration time in milliseconds (1 hour)
+  const CACHE_EXPIRATION = 3600 * 1000;
+
+  // Check if valid cache exists and return it
+  function checkAndGetCache(symbol) {
+    const cacheKey = `${symbol.toLowerCase()}_market_chart`;
+    const cachedItem = localStorage.getItem(cacheKey);
+
+    if (!cachedItem) return null;
+
+    try {
+      const cache = JSON.parse(cachedItem);
+      const timestamp = cache.timestamp;
+      const currentTime = new Date().getTime();
+
+      // Check if cache is still valid
+      if (currentTime - timestamp < CACHE_EXPIRATION) {
+        return cache.data;
+      }
+    } catch (e) {
+      console.error(`Error reading cache for ${symbol}:`, e);
+    }
+
+    return null;
+  }
+
+  // Save data to localStorage cache
+  function saveToCache(symbol, data) {
+    const cacheKey = `${symbol.toLowerCase()}_market_chart`;
+    const cacheObject = {
+      timestamp: new Date().getTime(),
+      data: data
+    };
+
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
+      console.log(`Cache updated for ${symbol}`);
+    } catch (e) {
+      console.error(`Error writing cache for ${symbol}:`, e);
+      // Handle potential localStorage quota exceeded errors
+      if (e.name === 'QuotaExceededError') {
+        clearOldestCache();
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
+        } catch (e2) {
+          console.error(`Still couldn't save cache after clearing:`, e2);
+        }
+      }
+    }
+  }
+
+  // Clear oldest cache entry if storage is full
+  function clearOldestCache() {
+    let oldest = null;
+    let oldestKey = null;
+
+    // Find the oldest cache entry
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.endsWith('_market_chart')) {
+        try {
+          const cache = JSON.parse(localStorage.getItem(key));
+          if (!oldest || cache.timestamp < oldest) {
+            oldest = cache.timestamp;
+            oldestKey = key;
+          }
+        } catch (e) {
+          console.error(`Error parsing cache:`, e);
+        }
+      }
+    }
+
+    // Remove the oldest entry if found
+    if (oldestKey) {
+      localStorage.removeItem(oldestKey);
+      console.log(`Removed oldest cache: ${oldestKey}`);
+    }
+  }
+
+  // Process API response into the format expected by the chart
+  function processApiResponse(symbol, apiData) {
+    // Extract the data points
+    const dailyData = apiData.Data.Data;
+
+    // Convert to the format expected by the frontend
+    const monthlyData = [];
+    let currentMonth = null;
+
+    for (const point of dailyData) {
+      const timestamp = point.time;
+      // Calculate market cap using the coin supply
+      const totalSupply = coins[symbol]?.supply || 1000000;
+      const marketCap = point.close * totalSupply;
+
+      // Extract month from timestamp
+      const timestampMs = timestamp * 1000;
+      const date = new Date(timestampMs);
+      const month = date.getMonth();
+
+      if (month !== currentMonth) {
+        currentMonth = month;
+        // Include price along with timestamp and market cap
+        monthlyData.push([timestampMs, marketCap, point.close]);
+      }
+    }
+
+    return { market_caps: monthlyData };
+  }
+
+  // Process API data into the marketCaps and prices arrays
+  function processApiData(crypto, data) {
+    if (!data.market_caps) {
+      throw Error(`Bad data format for ${crypto}`);
+    }
+
+    // Extract market cap and price values from response
+    marketCaps[crypto] = data.market_caps.map(entry => entry[1] || 0);
+    prices[crypto] = data.market_caps.map(entry => entry[2] || 0);
+  }
+
+  /**
+   * Fetch market cap data for all cryptocurrencies
+   * Makes parallel API requests and processes the responses
+   */
+  async function fetchMarketCaps() {
+    // Get UI elements for error handling
+    const errorElement = document.getElementById('error');
+    const retryButton = document.getElementById('reload');
+
+    // Reset error UI state
+    errorElement.style.display = 'none';
+    retryButton.style.display = 'none';
+
+    try {
+      // Fetch data for all cryptocurrencies in parallel
+      await Promise.all(cryptos.map(async (crypto) => {
+        // Check if we have valid cached data
+        const cachedData = checkAndGetCache(crypto);
+        if (cachedData) {
+          console.log(`Using cached data for ${crypto}`);
+          processApiData(crypto, cachedData);
+          return;
+        }
+
+        // Make direct API request to CryptoCompare
+        const url = "https://min-api.cryptocompare.com/data/v2/histoday";
+        const params = {
+          fsym: crypto,
+          tsym: 'USD',
+          limit: 365*3,  // Get data for 3 years
+          aggregate: 1
+        };
+
+        const queryString = new URLSearchParams(params).toString();
+        const response = await fetch(`${url}?${queryString}`);
+
+        // Handle HTTP errors
+        if (!response.ok) {
+          throw Error(`Fetch ${crypto} failed with status ${response.status}`);
+        }
+
+        // Parse JSON response
+        const data = await response.json();
+
+        // Validate response format
+        if (data.Response !== 'Success') {
+          throw Error(`Bad data format for ${crypto}: ${data.Message || 'Unknown error'}`);
+        }
+
+        // Process and cache the data
+        const processedData = processApiResponse(crypto, data);
+        saveToCache(crypto, processedData);
+        processApiData(crypto, processedData);
+      }));
+    } catch (error) {
+      // Log error to console
+      console.error(error);
+
+      // Update UI to show error state
+      document.getElementById('loader').style.display = 'none';
+      errorElement.textContent = 'Error: ' + error.message;
+      errorElement.style.display = 'block';
+      retryButton.style.display = 'inline-block';
+
+      // Re-throw error to be handled by caller
+      throw error;
+    }
+  }
+
+  // Set up retry button click handler
+  document.getElementById('reload').onclick = () => {
+    // Show loading indicator
+    document.getElementById('loader').style.display = 'block';
+    // Hide retry button
+    document.getElementById('reload').style.display = 'none';
+    // Restart initialization
+    init();
+  };
+
+  // Set up clear cache button click handler
+  document.getElementById('clearCacheBtn').onclick = () => {
+    // Clear all market chart caches
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.endsWith('_market_chart')) {
+        localStorage.removeItem(key);
+      }
+    }
+    alert('Cache cleared. Reloading data...');
+    // Restart initialization
+    init();
+  };
+
+  /**
+   * Initialize the month dots in the progress bar
+   */
+  function initializeMonthDots() {
+    const monthDotsContainer = document.getElementById('monthDots');
+    monthDotsContainer.innerHTML = '';
+
+    // Create a dot for each month
+    for (let i = 0; i < months.length; i++) {
+      const dot = document.createElement('div');
+      dot.style.width = '8px';
+      dot.style.height = '8px';
+      dot.style.borderRadius = '50%';
+      dot.style.backgroundColor = '#ccc';
+      dot.title = months[i];
+      monthDotsContainer.appendChild(dot);
+    }
+  }
+
+  /**
+   * Initialize the application
+   * Fetches data and starts the chart animation
+   */
+  async function init() {
+    try {
+      // Fetch market cap data for all cryptocurrencies
+      await fetchMarketCaps();
+
+      // Hide loading indicator
+      document.getElementById('loader').style.display = 'none';
+
+      // Show chart canvas and progress bar
+      document.getElementById('pieChart').style.display = 'block';
+      document.getElementById('progressContainer').style.display = 'block';
+      document.getElementById('clearCacheBtn').style.display = 'block';
+
+      // Initialize month dots
+      initializeMonthDots();
+
+      // Start the animation sequence
+      startAnimation();
+    } catch (error) {
+      // Error already handled in fetchMarketCaps
+      console.log('Initialization failed, retry button shown', error);
+    }
+  }
+
+  /**
+   * Calculate market cap percentages for a specific month
+   * @param {number} monthIndex - Index of the month to calculate percentages for
+   * @returns {Array} Array of percentage values for each cryptocurrency
+   */
+  function calculatePercentages(monthIndex) {
+    // Get market cap values for each cryptocurrency at the specified month
+    const marketCapValues = cryptos.map(crypto => marketCaps[crypto][monthIndex] || 0);
+
+    // Calculate the total market cap
+    const totalMarketCap = marketCapValues.reduce((sum, value) => sum + value, 0);
+
+    // Calculate percentage for each cryptocurrency
+    // If total is 0, return 0 to avoid division by zero
+    return marketCapValues.map(value => 
+      totalMarketCap ? ((value / totalMarketCap) * 100).toFixed(2) : 0
+    );
+  }
+
+  /**
+   * Get the price for a specific cryptocurrency at a specific month
+   * @param {string} crypto - The cryptocurrency symbol
+   * @param {number} monthIndex - Index of the month
+   * @returns {string} Formatted price value
+   */
+  function getPriceAtMonth(crypto, monthIndex) {
+    const price = prices[crypto][monthIndex] || 0;
+    return price.toFixed(2);
+  }
+
+  /**
+   * Start the pie chart animation sequence
+   * Creates the Chart.js instance and sets up the animation interval
+   */
+  function startAnimation() {
+    // Start with the first month
+    let monthIndex = 0;
+
+    // Get the canvas context for drawing
+    const ctx = document.getElementById('pieChart').getContext('2d');
+
+    // Set initial month label
+    document.getElementById('monthLabel').textContent = months[monthIndex];
+
+    // Chart.js configuration
+    const chartConfig = {
+      type: 'pie',
+      data: {
+        labels: cryptos,
+        datasets: [{
+          data: calculatePercentages(monthIndex),
+          backgroundColor: cryptos.map(crypto => coins[crypto].color)
+        }]
+      },
+      options: {
+        aspectRatio: 2.5,
+        layout: {
+          padding: {
+            top: 0,
+            bottom: 0
+          }
+        },
+        plugins: {
+          // Configure data labels plugin
+          datalabels: {
+            formatter: (value, context) => {
+              const crypto = context.chart.data.labels[context.dataIndex];
+              const price = getPriceAtMonth(crypto, monthIndex);
+              return `${crypto}:\n ${value}%\n $${price}`;
+            },
+            color: '#fff',
+            anchor: 'end',
+            align: 'start',
+            offset: 20,
+            font: {
+              weight: 'bold'
+            }
+          },
+          // Hide default legend
+          legend: {
+            display: false
+          }
+        },
+        animation: {
+          animateRotate: true,
+          duration: 1000
+        }
+      },
+      plugins: [ChartDataLabels]
+    };
+
+    // Create the chart
+    const chart = new Chart(ctx, chartConfig);
+
+    // Function to update the progress indicator
+    function updateProgressIndicator(index) {
+      // Calculate progress percentage
+      const progressPercentage = ((index + 1) / months.length) * 100;
+
+      // Update progress bar width
+      document.getElementById('progressIndicator').style.width = `${progressPercentage}%`;
+
+      // Update month dots - reset all dots to default color first
+      const dots = document.getElementById('monthDots').children;
+      for (let i = 0; i < dots.length; i++) {
+        dots[i].style.backgroundColor = '#ccc';
+      }
+
+      // Highlight current month dot
+      if (dots[index]) {
+        dots[index].style.backgroundColor = '#4CAF50';
+      }
+    }
+
+    // Update progress indicator for initial month
+    updateProgressIndicator(monthIndex);
+
+    // Set up animation interval (update every 2 seconds)
+    setInterval(() => {
+      // Move to next month (cycle back to start when reaching the end)
+      monthIndex = (monthIndex + 1) % months.length;
+
+      // Update month label
+      document.getElementById('monthLabel').textContent = months[monthIndex];
+
+      // Update progress indicator
+      updateProgressIndicator(monthIndex);
+
+      // Update chart data with new percentages
+      chart.data.datasets[0].data = calculatePercentages(monthIndex);
+
+      // Redraw the chart
+      chart.update();
+    }, 2000);
+  }
+
+  // Initialize the application when the DOM is fully loaded
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
