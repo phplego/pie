@@ -76,7 +76,7 @@
       font-weight: bold;
     }
 
-    /* Progress bar styles */
+    /* Progress slider styles */
     #progressContainer {
       width: 100%;
       max-width: 600px;
@@ -85,24 +85,16 @@
       flex-direction: column;
       align-items: center;
     }
-    #progressBar {
+    #progressSlider {
       width: 100%;
-      height: 10px;
-      background-color: #f0f0f0;
+      height: 20px;
+      margin: 10px 0;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #f0f0f0;
+      outline: none;
       border-radius: 5px;
-      overflow: hidden;
-      margin-bottom: 5px;
-    }
-    #progressIndicator {
-      height: 100%;
-      background-color: #4CAF50;
-      width: 0%;
-      transition: width 0.5s ease-in-out;
-    }
-    #monthDots {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -112,10 +104,7 @@
   <div class="chart-column">
     <div id="monthLabel"></div>
     <div id="progressContainer" style="display:none;">
-      <div id="progressBar">
-        <div id="progressIndicator"></div>
-      </div>
-      <div id="monthDots"></div>
+      <input type="range" id="progressSlider" min="0" max="0" value="0">
     </div>
     <canvas id="pieChart" style="display:none;"></canvas>
   </div>
@@ -411,22 +400,27 @@
   };
 
   /**
-   * Initialize the month dots in the progress bar
+   * Initialize the progress slider
    */
-  function initializeMonthDots() {
-    const monthDotsContainer = document.getElementById('monthDots');
-    monthDotsContainer.innerHTML = '';
+  function initializeProgressSlider() {
+    const slider = document.getElementById('progressSlider');
 
-    // Create a dot for each month
-    for (let i = 0; i < months.length; i++) {
-      const dot = document.createElement('div');
-      dot.style.width = '8px';
-      dot.style.height = '8px';
-      dot.style.borderRadius = '50%';
-      dot.style.backgroundColor = '#ccc';
-      dot.title = months[i];
-      monthDotsContainer.appendChild(dot);
-    }
+    // Set slider range based on number of months
+    slider.min = 0;
+    slider.max = months.length - 1;
+    slider.value = 0;
+
+    // Add event listener for slider changes
+    slider.addEventListener('input', function() {
+      // Update current month index
+      window.currentMonthIndex = parseInt(this.value);
+
+      // Update month label
+      document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
+
+      // Update chart
+      updateChart();
+    });
   }
 
   /**
@@ -531,8 +525,8 @@
       document.getElementById('clearCacheBtn').style.display = 'block';
       document.getElementById('cryptoOptions').style.display = 'block';
 
-      // Initialize month dots and crypto checkboxes
-      initializeMonthDots();
+      // Initialize progress slider and crypto checkboxes
+      initializeProgressSlider();
       initializeCryptoCheckboxes();
 
       // Start the animation sequence
@@ -645,28 +639,14 @@
     // Create the chart and store it in a global variable
     window.currentChart = new Chart(ctx, chartConfig);
 
-    // Function to update the progress indicator
-    function updateProgressIndicator(index) {
-      // Calculate progress percentage
-      const progressPercentage = ((index + 1) / months.length) * 100;
-
-      // Update progress bar width
-      document.getElementById('progressIndicator').style.width = `${progressPercentage}%`;
-
-      // Update month dots - reset all dots to default color first
-      const dots = document.getElementById('monthDots').children;
-      for (let i = 0; i < dots.length; i++) {
-        dots[i].style.backgroundColor = '#ccc';
-      }
-
-      // Highlight current month dot
-      if (dots[index]) {
-        dots[index].style.backgroundColor = '#4CAF50';
-      }
+    // Function to update the progress slider
+    function updateProgressSlider(index) {
+      // Update slider value
+      document.getElementById('progressSlider').value = index;
     }
 
-    // Update progress indicator for initial month
-    updateProgressIndicator(window.currentMonthIndex);
+    // Update progress slider for initial month
+    updateProgressSlider(window.currentMonthIndex);
 
     // Set up animation interval (update every 2 seconds)
     setInterval(() => {
@@ -676,8 +656,8 @@
       // Update month label
       document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
 
-      // Update progress indicator
-      updateProgressIndicator(window.currentMonthIndex);
+      // Update progress slider
+      updateProgressSlider(window.currentMonthIndex);
 
       // Get current enabled cryptocurrencies
       const currentEnabledCryptos = getEnabledCryptos();
