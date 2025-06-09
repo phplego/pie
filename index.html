@@ -7,17 +7,79 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
   <style>
-    body { display: flex; flex-direction: column; align-items: center; font-family: Arial, sans-serif; margin-top: 10px; }
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 0;
+      padding: 20px;
+    }
+
+    /* Two-column layout */
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .chart-column {
+      flex: 1;
+      min-width: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+    }
+
+    .settings-column {
+      flex: 1;
+      min-width: 300px;
+      padding: 10px;
+    }
+
     #monthLabel { font-size: 1.5rem; margin-bottom: 5px; }
     #loader { font-size: 1rem; color: #555; margin-top: 20px; }
     #error { color: red; font-weight: bold; margin-top: 10px; }
-    canvas { max-width: 800px; margin: 0; padding: 0; }
+    canvas { width: 100%; max-width: 600px; margin: 0; padding: 0; }
     button { margin-top: 10px; padding: 8px 16px; font-size: 1rem; }
     #clearCacheBtn { background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
 
+    /* Crypto checkboxes */
+    .crypto-options {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+    }
+
+    .crypto-option {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .crypto-option input {
+      margin-right: 10px;
+    }
+
+    .crypto-color {
+      display: inline-block;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+
+    .settings-title {
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+
     /* Progress bar styles */
     #progressContainer {
-      width: 700px;
+      width: 100%;
+      max-width: 600px;
       margin: 10px 0;
       display: flex;
       flex-direction: column;
@@ -45,55 +107,83 @@
   </style>
 </head>
 <body>
-<div id="monthLabel"></div>
-<div id="progressContainer" style="display:none;">
-  <div id="progressBar">
-    <div id="progressIndicator"></div>
+<div class="container">
+  <!-- Left column - Chart -->
+  <div class="chart-column">
+    <div id="monthLabel"></div>
+    <div id="progressContainer" style="display:none;">
+      <div id="progressBar">
+        <div id="progressIndicator"></div>
+      </div>
+      <div id="monthDots"></div>
+    </div>
+    <canvas id="pieChart" style="display:none;"></canvas>
   </div>
-  <div id="monthDots"></div>
+
+  <!-- Right column - Settings -->
+  <div class="settings-column">
+    <div id="loader">Loading data...</div>
+    <div id="error" style="display:none;"></div>
+    <button id="reload" style="display:none;">Retry Fetch</button>
+
+    <div class="crypto-options" style="display:none;" id="cryptoOptions">
+      <div class="settings-title">Cryptocurrencies</div>
+      <!-- Checkboxes will be added here dynamically -->
+    </div>
+
+    <button id="clearCacheBtn" style="display:none;">Clear Cache</button>
+  </div>
 </div>
-<div id="loader">Loading data...</div>
-<div id="error" style="display:none;"></div>
-<button id="reload" style="display:none;">Retry Fetch</button>
-<canvas id="pieChart" style="display:none;"></canvas>
-<button id="clearCacheBtn" style="display:none;">Clear Cache</button>
 
 <script>
   // ===== CONFIGURATION SECTION =====
+  // Number of years to load and display
+  const YEARS_TO_LOAD = 3;
+
   // Unified cryptocurrency configuration
   const coins = {
     'ADA': {
       color: '#0033ad',      // Cardano blue
-      supply: 45000000000
+      supply: 45000000000,
+      displayByDefault: true
     },
     'ETH': {
       color: '#3c3c3d',      // Ethereum dark gray
-      supply: 120000000
+      supply: 120000000,
+      displayByDefault: false
     },
     'BNB': {
       color: '#f3ba2f',      // Binance yellow
-      supply: 166801148
+      supply: 166801148,
+      displayByDefault: true
     },
     'TON': {
       color: '#0088CC',      // TonCoin blue
-      supply: 5000000000
+      supply: 5000000000,
+      displayByDefault: true
     },
     'SOL': {
       color: '#14f195',      // Solana green
-      supply: 555000000
+      supply: 555000000,
+      displayByDefault: true
     },
     'USDT': {
       color: '#26a17b',      // Tether green
-      supply: 83000000000
+      supply: 83000000000,
+      displayByDefault: false
     },
     'BTC': {
       color: '#f7931a',      // Bitcoin orange
-      supply: 21000000
+      supply: 21000000,
+      displayByDefault: false
     }
   };
 
-  // Define cryptocurrencies to display (using CryptoCompare API symbols)
-  const cryptos = ['ADA', 'ETH', 'BNB', 'TON', 'SOL', 'BTC'];
+  // Define cryptocurrencies to display from the coins object
+  const cryptos = Object.keys(coins);
+
+  // Track which cryptocurrencies are enabled (all enabled by default)
+  const enabledCryptos = {};
 
   // Month names for date formatting
   const monthNames = [
@@ -104,7 +194,7 @@
   // Generate array of last N months (newest to oldest)
   const months = [];
   let date = new Date();
-  for (let i = 0; i < 12*3; i++) {
+  for (let i = 0; i < 12 * YEARS_TO_LOAD; i++) {
     months.unshift(`${monthNames[date.getMonth()]} ${date.getFullYear()}`);
     date.setMonth(date.getMonth() - 1);
   }
@@ -242,14 +332,6 @@
    * Makes parallel API requests and processes the responses
    */
   async function fetchMarketCaps() {
-    // Get UI elements for error handling
-    const errorElement = document.getElementById('error');
-    const retryButton = document.getElementById('reload');
-
-    // Reset error UI state
-    errorElement.style.display = 'none';
-    retryButton.style.display = 'none';
-
     try {
       // Fetch data for all cryptocurrencies in parallel
       await Promise.all(cryptos.map(async (crypto) => {
@@ -266,7 +348,7 @@
         const params = {
           fsym: crypto,
           tsym: 'USD',
-          limit: 365*3,  // Get data for 3 years
+          limit: 365 * YEARS_TO_LOAD,  // Get data for specified years
           aggregate: 1
         };
 
@@ -295,11 +377,9 @@
       // Log error to console
       console.error(error);
 
-      // Update UI to show error state
+      // Show error with a simple alert
       document.getElementById('loader').style.display = 'none';
-      errorElement.textContent = 'Error: ' + error.message;
-      errorElement.style.display = 'block';
-      retryButton.style.display = 'inline-block';
+      alert('Error fetching data: ' + error.message);
 
       // Re-throw error to be handled by caller
       throw error;
@@ -350,6 +430,90 @@
   }
 
   /**
+   * Initialize cryptocurrency checkboxes
+   * Creates a checkbox for each cryptocurrency and adds event listeners
+   */
+  function initializeCryptoCheckboxes() {
+    const cryptoOptionsContainer = document.getElementById('cryptoOptions');
+
+    // Clear any existing checkboxes
+    const checkboxesContainer = cryptoOptionsContainer.querySelector('.settings-title').nextElementSibling;
+    if (checkboxesContainer) {
+      checkboxesContainer.remove();
+    }
+
+    // Create container for checkboxes
+    const container = document.createElement('div');
+
+    // Initialize cryptocurrencies based on configuration
+    cryptos.forEach(crypto => {
+      // Use the configuration to determine if this crypto should be enabled by default
+      enabledCryptos[crypto] = coins[crypto].displayByDefault;
+
+      // Create checkbox container
+      const checkboxContainer = document.createElement('div');
+      checkboxContainer.className = 'crypto-option';
+
+      // Create checkbox
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = `checkbox-${crypto}`;
+      checkbox.checked = coins[crypto].displayByDefault;
+
+      // Create color indicator
+      const colorIndicator = document.createElement('span');
+      colorIndicator.className = 'crypto-color';
+      colorIndicator.style.backgroundColor = coins[crypto].color;
+
+      // Create label
+      const label = document.createElement('label');
+      label.htmlFor = `checkbox-${crypto}`;
+      label.textContent = crypto;
+
+      // Add event listener to checkbox
+      checkbox.addEventListener('change', function() {
+        enabledCryptos[crypto] = this.checked;
+        updateChart();
+      });
+
+      // Append elements to container
+      checkboxContainer.appendChild(checkbox);
+      checkboxContainer.appendChild(colorIndicator);
+      checkboxContainer.appendChild(label);
+      container.appendChild(checkboxContainer);
+    });
+
+    // Append container to crypto options
+    cryptoOptionsContainer.appendChild(container);
+  }
+
+  /**
+   * Get currently enabled cryptocurrencies
+   * @returns {Array} Array of enabled cryptocurrency symbols
+   */
+  function getEnabledCryptos() {
+    return cryptos.filter(crypto => enabledCryptos[crypto]);
+  }
+
+  /**
+   * Update the chart with current data
+   * Called when checkboxes are toggled
+   */
+  function updateChart() {
+    if (window.currentChart && window.currentMonthIndex !== undefined) {
+      const enabledCryptosList = getEnabledCryptos();
+
+      // Update chart data
+      window.currentChart.data.labels = enabledCryptosList;
+      window.currentChart.data.datasets[0].data = calculatePercentages(window.currentMonthIndex, enabledCryptosList);
+      window.currentChart.data.datasets[0].backgroundColor = enabledCryptosList.map(crypto => coins[crypto].color);
+
+      // Update chart
+      window.currentChart.update();
+    }
+  }
+
+  /**
    * Initialize the application
    * Fetches data and starts the chart animation
    */
@@ -361,18 +525,21 @@
       // Hide loading indicator
       document.getElementById('loader').style.display = 'none';
 
-      // Show chart canvas and progress bar
+      // Show chart canvas, progress bar, and crypto options
       document.getElementById('pieChart').style.display = 'block';
       document.getElementById('progressContainer').style.display = 'block';
       document.getElementById('clearCacheBtn').style.display = 'block';
+      document.getElementById('cryptoOptions').style.display = 'block';
 
-      // Initialize month dots
+      // Initialize month dots and crypto checkboxes
       initializeMonthDots();
+      initializeCryptoCheckboxes();
 
       // Start the animation sequence
       startAnimation();
     } catch (error) {
-      // Error already handled in fetchMarketCaps
+      // Show retry button
+      document.getElementById('reload').style.display = 'inline-block';
       console.log('Initialization failed, retry button shown', error);
     }
   }
@@ -380,11 +547,15 @@
   /**
    * Calculate market cap percentages for a specific month
    * @param {number} monthIndex - Index of the month to calculate percentages for
+   * @param {Array} [cryptoList] - Optional list of cryptocurrencies to include (defaults to all enabled)
    * @returns {Array} Array of percentage values for each cryptocurrency
    */
-  function calculatePercentages(monthIndex) {
+  function calculatePercentages(monthIndex, cryptoList) {
+    // Use provided crypto list or get enabled cryptos
+    const activeCryptos = cryptoList || getEnabledCryptos();
+
     // Get market cap values for each cryptocurrency at the specified month
-    const marketCapValues = cryptos.map(crypto => marketCaps[crypto][monthIndex] || 0);
+    const marketCapValues = activeCryptos.map(crypto => marketCaps[crypto][monthIndex] || 0);
 
     // Calculate the total market cap
     const totalMarketCap = marketCapValues.reduce((sum, value) => sum + value, 0);
@@ -413,26 +584,29 @@
    */
   function startAnimation() {
     // Start with the first month
-    let monthIndex = 0;
+    window.currentMonthIndex = 0;
 
     // Get the canvas context for drawing
     const ctx = document.getElementById('pieChart').getContext('2d');
 
     // Set initial month label
-    document.getElementById('monthLabel').textContent = months[monthIndex];
+    document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
+
+    // Get enabled cryptocurrencies
+    const enabledCryptosList = getEnabledCryptos();
 
     // Chart.js configuration
     const chartConfig = {
       type: 'pie',
       data: {
-        labels: cryptos,
+        labels: enabledCryptosList,
         datasets: [{
-          data: calculatePercentages(monthIndex),
-          backgroundColor: cryptos.map(crypto => coins[crypto].color)
+          data: calculatePercentages(window.currentMonthIndex, enabledCryptosList),
+          backgroundColor: enabledCryptosList.map(crypto => coins[crypto].color)
         }]
       },
       options: {
-        aspectRatio: 2.5,
+        aspectRatio: 1,
         layout: {
           padding: {
             top: 0,
@@ -444,7 +618,7 @@
           datalabels: {
             formatter: (value, context) => {
               const crypto = context.chart.data.labels[context.dataIndex];
-              const price = getPriceAtMonth(crypto, monthIndex);
+              const price = getPriceAtMonth(crypto, window.currentMonthIndex);
               return `${crypto}:\n ${value}%\n $${price}`;
             },
             color: '#fff',
@@ -468,8 +642,8 @@
       plugins: [ChartDataLabels]
     };
 
-    // Create the chart
-    const chart = new Chart(ctx, chartConfig);
+    // Create the chart and store it in a global variable
+    window.currentChart = new Chart(ctx, chartConfig);
 
     // Function to update the progress indicator
     function updateProgressIndicator(index) {
@@ -492,24 +666,29 @@
     }
 
     // Update progress indicator for initial month
-    updateProgressIndicator(monthIndex);
+    updateProgressIndicator(window.currentMonthIndex);
 
     // Set up animation interval (update every 2 seconds)
     setInterval(() => {
       // Move to next month (cycle back to start when reaching the end)
-      monthIndex = (monthIndex + 1) % months.length;
+      window.currentMonthIndex = (window.currentMonthIndex + 1) % months.length;
 
       // Update month label
-      document.getElementById('monthLabel').textContent = months[monthIndex];
+      document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
 
       // Update progress indicator
-      updateProgressIndicator(monthIndex);
+      updateProgressIndicator(window.currentMonthIndex);
+
+      // Get current enabled cryptocurrencies
+      const currentEnabledCryptos = getEnabledCryptos();
 
       // Update chart data with new percentages
-      chart.data.datasets[0].data = calculatePercentages(monthIndex);
+      window.currentChart.data.labels = currentEnabledCryptos;
+      window.currentChart.data.datasets[0].data = calculatePercentages(window.currentMonthIndex, currentEnabledCryptos);
+      window.currentChart.data.datasets[0].backgroundColor = currentEnabledCryptos.map(crypto => coins[crypto].color);
 
       // Redraw the chart
-      chart.update();
+      window.currentChart.update();
     }, 2000);
   }
 
