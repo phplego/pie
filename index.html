@@ -113,7 +113,6 @@
   <div class="settings-column">
     <div id="loader">Loading data...</div>
     <div id="error" style="display:none;"></div>
-    <button id="reload" style="display:none;">Retry Fetch</button>
 
     <div class="crypto-options" style="display:none;" id="cryptoOptions">
       <div class="settings-title">Cryptocurrencies</div>
@@ -375,15 +374,6 @@
     }
   }
 
-  // Set up retry button click handler
-  document.getElementById('reload').onclick = () => {
-    // Show loading indicator
-    document.getElementById('loader').style.display = 'block';
-    // Hide retry button
-    document.getElementById('reload').style.display = 'none';
-    // Restart initialization
-    init();
-  };
 
   // Set up clear cache button click handler
   document.getElementById('clearCacheBtn').onclick = () => {
@@ -532,9 +522,7 @@
       // Start the animation sequence
       startAnimation();
     } catch (error) {
-      // Show retry button
-      document.getElementById('reload').style.display = 'inline-block';
-      console.log('Initialization failed, retry button shown', error);
+      console.log('Initialization failed', error);
     }
   }
 
