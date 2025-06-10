@@ -231,46 +231,13 @@
 
     try {
       localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
-      console.log(`Cache updated for ${symbol}`);
+      console.log(`Cache updated for ${symbol} SIZE: ${JSON.stringify(cacheObject).length} bytes`);
     } catch (e) {
       console.error(`Error writing cache for ${symbol}:`, e);
       // Handle potential localStorage quota exceeded errors
       if (e.name === 'QuotaExceededError') {
-        clearOldestCache();
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
-        } catch (e2) {
-          console.error(`Still couldn't save cache after clearing:`, e2);
-        }
+        console.warn('LocalStorage quota exceeded. Consider clearing cache.');
       }
-    }
-  }
-
-  // Clear oldest cache entry if storage is full
-  function clearOldestCache() {
-    let oldest = null;
-    let oldestKey = null;
-
-    // Find the oldest cache entry
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key.endsWith('_market_chart')) {
-        try {
-          const cache = JSON.parse(localStorage.getItem(key));
-          if (!oldest || cache.timestamp < oldest) {
-            oldest = cache.timestamp;
-            oldestKey = key;
-          }
-        } catch (e) {
-          console.error(`Error parsing cache:`, e);
-        }
-      }
-    }
-
-    // Remove the oldest entry if found
-    if (oldestKey) {
-      localStorage.removeItem(oldestKey);
-      console.log(`Removed oldest cache: ${oldestKey}`);
     }
   }
 
@@ -378,15 +345,14 @@
   // Set up clear cache button click handler
   document.getElementById('clearCacheBtn').onclick = () => {
     // Clear all market chart caches
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.endsWith('_market_chart')) {
-        localStorage.removeItem(key);
-      }
-    }
-    alert('Cache cleared. Reloading data...');
-    // Restart initialization
-    init();
+    const keysToRemove = Object.keys(localStorage).filter(key => key.endsWith('_market_chart'));
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key)
+      console.log(`Cache cleared for ${key}`);
+    });
+    alert('Cache cleared. Reloading page...');
+    // reload the page to fetch fresh data
+    window.location.reload();
   };
 
   /**
