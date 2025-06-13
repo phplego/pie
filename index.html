@@ -207,13 +207,9 @@
 
     if (!cachedItem) return null;
 
-    try {
-      const cache = JSON.parse(cachedItem);
-      if (new Date().getTime() - cache.timestamp < CACHE_EXPIRATION) {
-        return cache.data;
-      }
-    } catch (e) {
-      console.error(`Error reading cache for ${symbol}:`, e);
+    const cache = JSON.parse(cachedItem);
+    if (new Date().getTime() - cache.timestamp < CACHE_EXPIRATION) {
+      return cache.data;
     }
 
     return null;
@@ -229,24 +225,35 @@
       data: data
     };
 
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
-      console.log(`Cache updated for ${symbol}`);
-    } catch (e) {
-      console.error(`Error writing cache for ${symbol}:`, e);
-      if (e.name === 'QuotaExceededError') {
-        console.warn('LocalStorage quota exceeded. Consider clearing cache.');
-      }
+    localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
+  }
+
+  /**
+   * Save enabled cryptocurrencies state to localStorage
+   */
+  function saveEnabledCryptosToLocalStorage() {
+    localStorage.setItem('enabled_cryptos', JSON.stringify(enabledCryptos));
+  }
+
+  /**
+   * Load enabled cryptocurrencies state from localStorage
+   */
+  function loadEnabledCryptosFromLocalStorage() {
+    const savedEnabledCryptos = localStorage.getItem('enabled_cryptos');
+    if (savedEnabledCryptos) {
+      return JSON.parse(savedEnabledCryptos);
     }
+    return null;
   }
 
   // Set up clear cache button click handler
   document.getElementById('clearCacheBtn').onclick = () => {
     // Clear all market chart caches
-    const keysToRemove = Object.keys(localStorage).filter(key => key.endsWith('_market_chart'));
+    const keysToRemove = Object.keys(localStorage).filter(key => 
+      key.endsWith('_market_chart') || key === 'enabled_cryptos'
+    );
     keysToRemove.forEach(key => {
       localStorage.removeItem(key)
-      console.log(`Cache cleared for ${key}`);
     });
     alert('Cache cleared. Reloading page...');
     // reload the page to fetch fresh data
@@ -301,54 +308,46 @@
       prices: {}
     };
 
-    try {
-      // Fetch data for all cryptocurrencies in parallel
-      await Promise.all(cryptos.map(async (crypto) => {
-        // Check if we have valid cached data
-        const cachedData = checkAndGetCache(crypto);
-        if (cachedData) {
-          console.log(`Using cached data for ${crypto}`);
-          const processedData = processApiData(crypto, cachedData);
-          result.marketCaps[crypto] = processedData.marketCaps;
-          result.prices[crypto] = processedData.prices;
-          return;
-        }
+    // Fetch data for all cryptocurrencies in parallel
+    await Promise.all(cryptos.map(async (crypto) => {
+      // Check if we have valid cached data
+      const cachedData = checkAndGetCache(crypto);
+      if (cachedData) {
+        const processedData = processApiData(crypto, cachedData);
+        result.marketCaps[crypto] = processedData.marketCaps;
+        result.prices[crypto] = processedData.prices;
+        return;
+      }
 
-        // Make API request to CryptoCompare
-        const url = "https://min-api.cryptocompare.com/data/v2/histoday";
-        const params = {
-          fsym: crypto,
-          tsym: 'USD',
-          limit: 365 * YEARS_TO_LOAD,
-          aggregate: 1
-        };
+      // Make API request to CryptoCompare
+      const url = "https://min-api.cryptocompare.com/data/v2/histoday";
+      const params = {
+        fsym: crypto,
+        tsym: 'USD',
+        limit: 365 * YEARS_TO_LOAD,
+        aggregate: 1
+      };
 
-        const response = await fetch(`${url}?${new URLSearchParams(params)}`);
+      const response = await fetch(`${url}?${new URLSearchParams(params)}`);
 
-        if (!response.ok) {
-          throw Error(`Fetch ${crypto} failed with status ${response.status}`);
-        }
+      if (!response.ok) {
+        throw Error(`Fetch ${crypto} failed with status ${response.status}`);
+      }
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.Response !== 'Success') {
-          throw Error(`Bad data format for ${crypto}: ${data.Message || 'Unknown error'}`);
-        }
+      if (data.Response !== 'Success') {
+        throw Error(`Bad data format for ${crypto}: ${data.Message || 'Unknown error'}`);
+      }
 
-        const processedData = processApiResponse(crypto, data);
-        saveToCache(crypto, processedData);
-        const cryptoData = processApiData(crypto, processedData);
-        result.marketCaps[crypto] = cryptoData.marketCaps;
-        result.prices[crypto] = cryptoData.prices;
-      }));
+      const processedData = processApiResponse(crypto, data);
+      saveToCache(crypto, processedData);
+      const cryptoData = processApiData(crypto, processedData);
+      result.marketCaps[crypto] = cryptoData.marketCaps;
+      result.prices[crypto] = cryptoData.prices;
+    }));
 
-      return result;
-    } catch (error) {
-      console.error(error);
-      document.getElementById('loader').style.display = 'none';
-      alert('Error fetching data: ' + error.message);
-      throw error;
-    }
+    return result;
   }
 
   // ===== CHART CALCULATIONS =====
@@ -421,8 +420,9 @@
 
   /**
    * Initialize cryptocurrency checkboxes
+   * @param {Object} savedState - Optional saved state to use for checkbox values
    */
-  function initializeCryptoCheckboxes() {
+  function initializeCryptoCheckboxes(savedState) {
     const cryptoOptionsContainer = document.getElementById('cryptoOptions');
     const initialEnabledState = {};
 
@@ -435,7 +435,11 @@
     const container = document.createElement('div');
 
     cryptos.forEach(crypto => {
-      const isEnabled = coins[crypto].displayByDefault;
+      // Use saved state if available, otherwise use default
+      const isEnabled = savedState && savedState[crypto] !== undefined 
+        ? savedState[crypto] 
+        : coins[crypto].displayByDefault;
+
       initialEnabledState[crypto] = isEnabled;
 
       const checkboxContainer = document.createElement('div');
@@ -456,6 +460,7 @@
 
       checkbox.addEventListener('change', function() {
         enabledCryptos[crypto] = this.checked;
+        saveEnabledCryptosToLocalStorage();
         updateChart();
       });
 
@@ -535,25 +540,23 @@
    * Initialize the application
    */
   async function init() {
-    try {
-      const data = await fetchMarketCaps();
+    const data = await fetchMarketCaps();
 
-      Object.assign(marketCaps, data.marketCaps);
-      Object.assign(prices, data.prices);
+    Object.assign(marketCaps, data.marketCaps);
+    Object.assign(prices, data.prices);
 
-      document.getElementById('loader').style.display = 'none';
-      document.getElementById('pieChart').style.display = 'block';
-      document.getElementById('progressContainer').style.display = 'block';
-      document.getElementById('clearCacheBtn').style.display = 'block';
-      document.getElementById('cryptoOptions').style.display = 'block';
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('pieChart').style.display = 'block';
+    document.getElementById('progressContainer').style.display = 'block';
+    document.getElementById('clearCacheBtn').style.display = 'block';
+    document.getElementById('cryptoOptions').style.display = 'block';
 
-      initializeProgressSlider();
-      Object.assign(enabledCryptos, initializeCryptoCheckboxes());
+    initializeProgressSlider();
+    // Load saved cryptocurrency selections or use defaults
+    const savedEnabledCryptos = loadEnabledCryptosFromLocalStorage();
+    Object.assign(enabledCryptos, initializeCryptoCheckboxes(savedEnabledCryptos));
 
-      startAnimation();
-    } catch (error) {
-      console.log('Initialization failed', error);
-    }
+    startAnimation();
   }
 
   // Initialize the application when the DOM is fully loaded
