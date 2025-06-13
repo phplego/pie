@@ -479,7 +479,7 @@
    * Start the pie chart animation sequence
    */
   function startAnimation() {
-    let currentMonthIndex = 0;
+    window.currentMonthIndex = 0;
     const ctx = document.getElementById('pieChart').getContext('2d');
     document.getElementById('monthLabel').textContent = months[currentMonthIndex];
 
@@ -500,7 +500,7 @@
           datalabels: {
             formatter: (value, context) => {
               const crypto = context.chart.data.labels[context.dataIndex];
-              const price = getPriceAtMonth(crypto, currentMonthIndex, prices);
+              const price = getPriceAtMonth(crypto, window.currentMonthIndex, prices);
               return `${crypto}\n${value}%\n$${price}`;
             },
             color: '#fff',
@@ -516,8 +516,7 @@
       plugins: [ChartDataLabels]
     });
 
-    updateProgressSlider(currentMonthIndex);
-    window.currentMonthIndex = currentMonthIndex;
+    updateProgressSlider(window.currentMonthIndex);
     window.currentChart = chart;
 
     setInterval(() => {
@@ -530,13 +529,6 @@
       window.currentChart.data.labels = currentEnabledCryptos;
       window.currentChart.data.datasets[0].data = calculatePercentages(window.currentMonthIndex, currentEnabledCryptos, marketCaps);
       window.currentChart.data.datasets[0].backgroundColor = currentEnabledCryptos.map(crypto => coins[crypto].color);
-
-      // Update the datalabels formatter to use the current month index
-      window.currentChart.options.plugins.datalabels.formatter = (value, context) => {
-        const crypto = context.chart.data.labels[context.dataIndex];
-        const price = getPriceAtMonth(crypto, window.currentMonthIndex, prices);
-        return `${crypto}\n${value}%\n$${price}`;
-      };
 
       window.currentChart.update();
     }, ANIMATION_INTERVAL);
