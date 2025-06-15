@@ -89,7 +89,6 @@
       width: 100%;
       height: 20px;
       margin: 10px 0;
-      -webkit-appearance: none;
       appearance: none;
       background: #f0f0f0;
       outline: none;
@@ -262,43 +261,45 @@
 
   // ===== DATA PROCESSING =====
   /**
-   * Process API response into monthly data format
-   * @param {string} symbol - Cryptocurrency symbol
-   * @param {Object} apiData - Raw data from CryptoCompare API
-   * @return {Object} Processed data with market caps and prices
-   */
-  function processApiResponse(symbol, apiData) {
-    const dailyData = apiData.Data.Data;
-    const monthlyData = [];
-    let currentMonth = null;
-
-    for (const point of dailyData) {
-      const totalSupply = coins[symbol].supply;
-      const marketCap = point.close * totalSupply;
-      const timestampMs = point.time * 1000;
-      const month = new Date(timestampMs).getMonth();
-
-      if (month !== currentMonth) {
-        currentMonth = month;
-        monthlyData.push([timestampMs, marketCap, point.close]);
-      }
-    }
-
-    return { market_caps: monthlyData };
-  }
-
-  /**
-   * Extract market caps and prices from API data
+   * Process cryptocurrency data from API or cache
+   * @param {string} crypto - Cryptocurrency symbol
+   * @param {Object} data - Data from API or cache
+   * @return {Object} Processed data with market caps and prices arrays
    */
   function processApiData(crypto, data) {
-    if (!data.market_caps) {
-      throw Error(`Bad data format for ${crypto}`);
+    // Handle raw API data
+    if (data.Data && data.Data.Data) {
+      const dailyData = data.Data.Data;
+      const monthlyData = [];
+      let currentMonth = null;
+
+      for (const point of dailyData) {
+        const totalSupply = coins[crypto].supply;
+        const marketCap = point.close * totalSupply;
+        const timestampMs = point.time * 1000;
+        const month = new Date(timestampMs).getMonth();
+
+        if (month !== currentMonth) {
+          currentMonth = month;
+          monthlyData.push([timestampMs, marketCap, point.close]);
+        }
+      }
+
+      return {
+        marketCaps: monthlyData.map(entry => entry[1] || 0),
+        prices: monthlyData.map(entry => entry[2] || 0)
+      };
     }
 
-    return {
-      marketCaps: data.market_caps.map(entry => entry[1] || 0),
-      prices: data.market_caps.map(entry => entry[2] || 0)
-    };
+    // Handle already processed data (from cache)
+    if (data.marketCaps && data.prices) {
+      return {
+        marketCaps: data.marketCaps,
+        prices: data.prices
+      };
+    }
+
+    throw Error(`Bad data format for ${crypto}`);
   }
 
   /**
@@ -343,9 +344,12 @@
         throw Error(`Bad data format for ${crypto}: ${data.Message || 'Unknown error'}`);
       }
 
-      const processedData = processApiResponse(crypto, data);
-      saveToCache(crypto, processedData);
-      const cryptoData = processApiData(crypto, processedData);
+      const cryptoData = processApiData(crypto, data);
+      // Save the processed data directly to the cache
+      saveToCache(crypto, {
+        marketCaps: cryptoData.marketCaps,
+        prices: cryptoData.prices
+      });
       result.marketCaps[crypto] = cryptoData.marketCaps;
       result.prices[crypto] = cryptoData.prices;
     }));
