@@ -263,6 +263,9 @@
   // ===== DATA PROCESSING =====
   /**
    * Process API response into monthly data format
+   * @param {string} symbol - Cryptocurrency symbol
+   * @param {Object} apiData - Raw data from CryptoCompare API
+   * @return {Object} Processed data with market caps and prices
    */
   function processApiResponse(symbol, apiData) {
     const dailyData = apiData.Data.Data;
@@ -270,7 +273,7 @@
     let currentMonth = null;
 
     for (const point of dailyData) {
-      const totalSupply = coins[symbol]?.supply || 1000000;
+      const totalSupply = coins[symbol].supply;
       const marketCap = point.close * totalSupply;
       const timestampMs = point.time * 1000;
       const month = new Date(timestampMs).getMonth();
