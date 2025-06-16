@@ -17,3 +17,5 @@
    - Focus error handling on critical user experience issues
    - Use browser's built-in error reporting where appropriate
 
+4. **Keep Everything in One File**
+   - Consolidate HTML, CSS, and JavaScript in a single file for simplicity
