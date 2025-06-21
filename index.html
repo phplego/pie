@@ -245,7 +245,7 @@
   }
 
   // Set up clear cache button click handler
-  document.getElementById('clearCacheBtn').onclick = () => {
+  document.querySelector('#clearCacheBtn').onclick = () => {
     // Clear all market chart caches
     const keysToRemove = Object.keys(localStorage).filter(key => 
       key.endsWith('_market_chart') || key === 'enabled_cryptos'
@@ -405,21 +405,21 @@
    * Update the progress slider position
    */
   function updateProgressSlider(index) {
-    document.getElementById('progressSlider').value = index;
+    document.querySelector('#progressSlider').value = index;
   }
 
   /**
    * Initialize the progress slider
    */
   function initializeProgressSlider() {
-    const slider = document.getElementById('progressSlider');
+    const slider = document.querySelector('#progressSlider');
     slider.min = 0;
     slider.max = months.length - 1;
     slider.value = 0;
 
     slider.addEventListener('input', function() {
       window.currentMonthIndex = parseInt(this.value);
-      document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
+      document.querySelector('#monthLabel').textContent = months[window.currentMonthIndex];
       updateChart();
     });
   }
@@ -429,7 +429,7 @@
    * @param {Object} savedState - Optional saved state to use for checkbox values
    */
   function initializeCryptoCheckboxes(savedState) {
-    const cryptoOptionsContainer = document.getElementById('cryptoOptions');
+    const cryptoOptionsContainer = document.querySelector('#cryptoOptions');
     const initialEnabledState = {};
 
     // Clear any existing checkboxes
@@ -486,8 +486,8 @@
    */
   function startAnimation() {
     window.currentMonthIndex = 0;
-    const ctx = document.getElementById('pieChart').getContext('2d');
-    document.getElementById('monthLabel').textContent = months[currentMonthIndex];
+    const ctx = document.querySelector('#pieChart').getContext('2d');
+    document.querySelector('#monthLabel').textContent = months[currentMonthIndex];
 
     const enabledCryptosList = cryptos.filter(crypto => enabledCryptos[crypto]);
 
@@ -527,7 +527,7 @@
 
     setInterval(() => {
       window.currentMonthIndex = (window.currentMonthIndex + 1) % months.length;
-      document.getElementById('monthLabel').textContent = months[window.currentMonthIndex];
+      document.querySelector('#monthLabel').textContent = months[window.currentMonthIndex];
       updateProgressSlider(window.currentMonthIndex);
 
       const currentEnabledCryptos = cryptos.filter(crypto => enabledCryptos[crypto]);
@@ -551,7 +551,7 @@
       Object.assign(marketCaps, data.marketCaps);
       Object.assign(prices, data.prices);
 
-      document.getElementById('loader').style.display = 'none';
+      document.querySelector('#loader').style.display = 'none';
       document.querySelector('.container').style.display = 'flex';
 
       initializeProgressSlider();
