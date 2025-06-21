@@ -38,8 +38,7 @@
     }
 
     #monthLabel { font-size: 1.5rem; margin-bottom: 5px; }
-    #loader { font-size: 1rem; color: #555; margin-top: 20px; }
-    #error { color: red; font-weight: bold; margin-top: 10px; }
+    #loader { font-size: 1rem; color: #555; margin-top: 20px; text-align: center; }
     canvas { width: 100%; max-width: 600px; margin: 0; padding: 0; }
     button { margin-top: 10px; padding: 8px 16px; font-size: 1rem; }
     #clearCacheBtn { background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
@@ -98,27 +97,27 @@
   </style>
 </head>
 <body>
-<div class="container">
+
+<div id="loader">Loading data...</div>
+
+<div class="container" style="display: none;">
   <!-- Left column - Chart -->
   <div class="chart-column">
     <div id="monthLabel"></div>
-    <div id="progressContainer" style="display:none;">
+    <div id="progressContainer">
       <input type="range" id="progressSlider" min="0" max="0" value="0">
     </div>
-    <canvas id="pieChart" style="display:none;"></canvas>
+    <canvas id="pieChart"></canvas>
   </div>
 
   <!-- Right column - Settings -->
   <div class="settings-column">
-    <div id="loader">Loading data...</div>
-    <div id="error" style="display:none;"></div>
-
-    <div class="crypto-options" style="display:none;" id="cryptoOptions">
+    <div class="crypto-options" id="cryptoOptions">
       <div class="settings-title">Cryptocurrencies</div>
       <!-- Checkboxes will be added here dynamically -->
     </div>
 
-    <button id="clearCacheBtn" style="display:none;">Clear Cache</button>
+    <button id="clearCacheBtn">Clear Cache</button>
   </div>
 </div>
 
@@ -553,10 +552,7 @@
       Object.assign(prices, data.prices);
 
       document.getElementById('loader').style.display = 'none';
-      document.getElementById('pieChart').style.display = 'block';
-      document.getElementById('progressContainer').style.display = 'block';
-      document.getElementById('clearCacheBtn').style.display = 'block';
-      document.getElementById('cryptoOptions').style.display = 'block';
+      document.querySelector('.container').style.display = 'flex';
 
       initializeProgressSlider();
       // Load saved cryptocurrency selections or use defaults
