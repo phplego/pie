@@ -566,6 +566,20 @@
       startAnimation();
     } catch (error) {
       console.log('Initialization failed', error);
+
+      // add link to hard cache clear and reload to loader div
+      document.querySelector('#loader').innerHTML = `
+          Error loading data.<br>
+          <a href="#" id="hardClearCache">Clear cache and reload.</a>
+        `;
+
+      document.querySelector('#hardClearCache')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        // clear all localStorage
+        localStorage.clear();
+        location.reload();
+      });
+
     }
   }
 
